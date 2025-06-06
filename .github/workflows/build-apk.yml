@@ -1,39 +1,81 @@
-name: Build EPUBium Volume Mod
+name: EPUBium Build with Volume Key Mod
 
 on:
   push:
-    branches: [ master ]
+    branches: [master]
   workflow_dispatch:
 
 jobs:
-  build:
+  setup_android_sdk:
+    name: Setup Android SDK with JDK 17
     runs-on: ubuntu-22.04
-    
+    outputs:
+      android-sdk-path: ${{ steps.setup.outputs.android-home }}
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Setup Java
-      uses: actions/setup-java@v4
-      with:
-        distribution: 'temurin'
-        java-version: 8
+      - name: Checkout code (for setup)
+        uses: actions/checkout@v4
+        with:
+          path: sdk-setup
+          
+      - name: Set up JDK 17 for SDK Tools
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Install Android Command-line Tools
+        id: setup
+        uses: android-actions/setup-android@v3
+        with:
+          # 使用兼容JDK 17的版本
+          cmdline-tools-version: "11.0"  
+          
+      - name: Export SDK path
+        run: |
+          echo "android-home=$ANDROID_HOME" >> $GITHUB_OUTPUT
+
+  build_apk:
+    name: Build APK with JDK 8
+    needs: setup_android_sdk  # 确保SDK设置先完成
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
         
-    - name: Setup Android
-      uses: android-actions/setup-android@v3
-      
-    - name: Build APK
-      run: |
-        chmod +x gradlew
-        ./gradlew assembleDebug
+      - name: Set up JDK 8 for Gradle Build
+        uses: actions/setup-java@v4
+        with:
+          java-version: '8'
+          distribution: 'temurin'
+          
+      - name: Configure Android SDK Path
+        run: |
+          echo "sdk.dir=${{ needs.setup_android_sdk.outputs.android-sdk-path }}" > local.properties
+          cat local.properties
+          
+      - name: Fix gradlew permissions
+        run: chmod +x gradlew
+          
+      - name: Build APK
+        run: ./gradlew assembleDebug
         
-    - name: Prepare artifact
-      run: |
-        mkdir apk-artifact
-        cp app/build/outputs/apk/debug/*.apk apk-artifact/
+      - name: Prepare artifact
+        run: |
+          mkdir apk-artifact
+          cp app/build/outputs/apk/debug/*.apk apk-artifact/
         
-    - name: Upload APK
-      uses: actions/upload-artifact@v4
-      with:
-        name: epubium-volume-mod-apk
-        path: apk-artifact/
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: epubium-volume-mod-apk
+          path: apk-artifact/
+          
+      # 可选：上传Gradle报告
+      - name: Upload Build Report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-reports
+          path: |
+            app/build/reports/
+            .gradle/
