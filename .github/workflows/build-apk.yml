@@ -16,7 +16,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: sdk-setup
-          fetch-depth: 1  # 只获取最新提交，加速下载
           
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -24,11 +23,9 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      # 手动下载Android命令行工具
       - name: Download Android Tools
         run: |
-          # 使用当前有效的版本号
-          TOOLS_VERSION="10406996"
+          TOOLS_VERSION="9477386"  # 兼容JDK 17的稳定版本
           wget https://dl.google.com/android/repository/commandlinetools-linux-${TOOLS_VERSION}_latest.zip -O tools.zip
           unzip tools.zip -d cmdline-tools
           mv cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
@@ -36,13 +33,20 @@ jobs:
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
         
-      - name: Accept licenses
+      # ===== 关键修复：接受所有SDK许可证 =====
+      - name: Accept all Android licenses
         run: |
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
+          # 创建许可证目录
+          mkdir -p $ANDROID_HOME/licenses
+          # 接受所有许可证（自动生成所需的许可证文件）
+          echo "d56f5187479451a728f00fdead2e6e72" > $ANDROID_HOME/licenses/android-sdk-license
+          echo "84831b9409646a918e30573bab4c9c72" > $ANDROID_HOME/licenses/android-sdk-preview-license
+          echo "8933bad161af4178b1185d1f37dbf86a" >> $ANDROID_HOME/licenses/android-sdk-license
           
       - name: Install essential packages
         run: |
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-33"
+          # 安装必需的Android SDK组件
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-33" "build-tools;29.0.3"
           
       - name: Export SDK path
         run: echo "android-home=$ANDROID_HOME" >> $GITHUB_OUTPUT
@@ -69,9 +73,7 @@ jobs:
         run: chmod +x gradlew
           
       - name: Build APK
-        run: ./gradlew assembleDebug
-        env:
-          ORG_GRADLE_PROJECT_mavenLocalRepo: ${{ github.workspace }}/.m2/repository
+        run: ./gradlew assembleDebug --stacktrace
         
       - name: Prepare artifact
         run: |
@@ -84,12 +86,11 @@ jobs:
           name: epubium-volume-mod-apk
           path: apk-artifact/
           
-      # 附加调试信息
-      - name: Collect debug info
+      # 调试信息
+      - name: Verify licenses
         if: ${{ always() }}
         run: |
-          echo "====== Android SDK Contents ======"
-          ls -lR ${{ needs.setup_android_sdk.outputs.android-sdk-path }}
-          echo "====== Gradle Version ======"
-          ./gradlew --version
-        shell: bash
+          echo "====== Installed licenses ======"
+          ls -l ${{ needs.setup_android_sdk.outputs.android-sdk-path }}/licenses
+          echo "====== SDK Components ======"
+          ${{ needs.setup_android_sdk.outputs.android-sdk-path }}/cmdline-tools/latest/bin/sdkmanager --list_installed
