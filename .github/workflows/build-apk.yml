@@ -68,6 +68,7 @@ jobs:
           rm -rf ~/.gradle
           rm -rf .gradle
           rm -rf app/build
+          chmod +x gradlew
           ./gradlew clean
           
       - name: Run with full debug
