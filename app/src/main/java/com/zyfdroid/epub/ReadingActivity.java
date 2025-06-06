@@ -361,49 +361,41 @@ public class ReadingActivity extends AppCompatActivity {
     }
 
     private EinkRecyclerView displayingEinkPage = null;
-
-
-
+    
     @Override
-    public boolean onKeyDown(int keyCode, KeyEvent event) {
-
-        if(keyCode==KeyEvent.KEYCODE_VOLUME_UP || keyCode==KeyEvent.KEYCODE_VOLUME_DOWN) {
-
-            if (event.getRepeatCount() > 0) {
-                return true;
-            }
-            if (isDrawerOpen()) {
-                if (SpUtils.getInstance(this).getEinkMode()) {
-                    if (displayingEinkPage != null) {
-                        if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) {
-                            displayingEinkPage.pageUp();
-                            return true;
-                        }
-
-                        if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
-                            displayingEinkPage.pageDown();
-                            return true;
-                        }
+public boolean onKeyDown(int keyCode, KeyEvent event) {
+    // 永远响应音量键，不需要检查重复计数
+    if(keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
+        
+        // 当侧边菜单打开时处理 - 保持原有逻辑
+        if (isDrawerOpen()) {
+            if (SpUtils.getInstance(this).getEinkMode()) {
+                if (displayingEinkPage != null) {
+                    if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) {
+                        displayingEinkPage.pageUp();
+                        return true;
+                    }
+                    if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
+                        displayingEinkPage.pageDown();
+                        return true;
                     }
                 }
-                return super.onKeyDown(keyCode, event);
             }
-
-            if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) {
-                evaluteJavascriptFunction("prev");
-                return true;
-            }
-
-            if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
-                evaluteJavascriptFunction("next");
-                return true;
-            }
+            return super.onKeyDown(keyCode, event);
         }
-        return super.onKeyDown(keyCode, event);
+        
+        // 核心修改从这里开始 - 主阅读界面音量键处理
+        if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) {
+            evaluteJavascriptFunction("prev"); // 上一页
+            return true;
+        }
+        if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
+            evaluteJavascriptFunction("next"); // 下一页
+            return true;
+        }
     }
-
-
-
+    return super.onKeyDown(keyCode, event);
+}
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         if(ViewUtils.sourceIsGamepad(event.getSource())){
