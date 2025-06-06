@@ -1,4 +1,4 @@
-name: EPUBium Build with Volume Key Mod (Fixed Path)
+name: EPUBium Volume Key Build (Java 11 Fixed)
 
 on:
   push:
@@ -9,49 +9,46 @@ jobs:
   setup_android_sdk:
     name: Setup Android SDK
     runs-on: ubuntu-22.04
-    outputs:
-      android-sdk-path: ${{ steps.export-sdk.outputs.android-home }}
     steps:
-      - name: Checkout minimal code
+      - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          path: sdk-setup
-          
-      - name: Set up JDK 17
+      
+      # 使用JDK 11
+      - name: Set up JDK 11 for SDK Tools
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
+          java-version: '11'
           distribution: 'temurin'
-
-      # 显式定义ANDROID_HOME路径
+          
       - name: Set Android Home
         run: |
           echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> $GITHUB_ENV
           
       - name: Download Android Tools
         run: |
-          TOOLS_VERSION="9477386"
+          # 使用兼容JDK 11的最新工具版本
+          TOOLS_VERSION="10406996"
           wget https://dl.google.com/android/repository/commandlinetools-linux-${TOOLS_VERSION}_latest.zip -O tools.zip
           unzip tools.zip -d cmdline-tools
           mv cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
           rm tools.zip
         
-      # 固定许可证密钥（所有必需项）
-      - name: Accept all Android licenses
+      # 接受所有必需的Android许可证
+      - name: Accept Android Licenses
         run: |
           mkdir -p $ANDROID_HOME/licenses
           echo -e "8933bad161af4178b1185d1f37dbf86a\nd56f5187479451a728f00fdead2e6e72" > $ANDROID_HOME/licenses/android-sdk-license
           echo "84831b9409646a918e30573bab4c9c72" > $ANDROID_HOME/licenses/android-sdk-preview-license
           
-      - name: Install essential packages
+      # 安装指定版本的SDK组件
+      - name: Install SDK Components
         run: |
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-33" "build-tools;29.0.3"
-          
-      # 显式输出路径变量
-      - name: Export SDK path
+
+      # 输出SDK路径供后续使用
+      - name: Export SDK Path
         id: export-sdk
         run: |
-          echo "ANDROID_SDK=$ANDROID_HOME" >> $GITHUB_OUTPUT
           echo "android-home=$ANDROID_HOME" >> $GITHUB_OUTPUT
 
   build_apk:
@@ -59,27 +56,28 @@ jobs:
     needs: setup_android_sdk
     runs-on: ubuntu-22.04
     steps:
-      - name: Checkout full code
-        uses: actions/checkout@v4
-        
-      - name: Set up JDK 8
+      # 为Gradle构建配置Java环境
+      - name: Set up JDK for Gradle
         uses: actions/setup-java@v4
         with:
-          java-version: '8'
+          java-version: '8' # Gradle 6.1.1需要Java 8
           distribution: 'temurin'
-          
-      # 使用正确的SDK路径变量
-      - name: Configure SDK path
+      
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      # 配置SDK路径
+      - name: Configure SDK Path
         run: |
-          echo "sdk.dir=${{ needs.setup_android_sdk.outputs.android-sdk-path }}" > local.properties
+          echo "sdk.dir=${{ needs.setup_android_sdk.outputs.android-home }}" > local.properties
           
-      - name: Fix gradlew permissions
+      - name: Make Gradlew Executable
         run: chmod +x gradlew
           
       - name: Build APK
         run: ./gradlew assembleDebug --stacktrace
         
-      - name: Prepare artifact
+      - name: Prepare APK Artifact
         run: |
           mkdir apk-artifact
           cp app/build/outputs/apk/debug/*.apk apk-artifact/
@@ -90,14 +88,12 @@ jobs:
           name: epubium-volume-mod-apk
           path: apk-artifact/
           
-      # 修复路径验证步骤
-      - name: Verify SDK setup
-        if: ${{ always() }}
+      # Java版本验证
+      - name: Verify Java Versions
         run: |
-          SDK_PATH="${{ needs.setup_android_sdk.outputs.android-sdk-path }}"
-          echo "====== SDK PATH ======"
-          echo $SDK_PATH
-          echo "====== Licenses ======"
-          ls -l $SDK_PATH/licenses/
-          echo "====== Installed Components ======"
-          $SDK_PATH/cmdline-tools/latest/bin/sdkmanager --list_installed
+          echo "=== SDK工具使用的Java版本 ==="
+          ${{ needs.setup_android_sdk.outputs.android-home }}/cmdline-tools/latest/bin/sdkmanager --version
+          
+          echo "=== Gradle构建使用的Java版本 ==="
+          java -version
+          ./gradlew --version | grep "Java Version"
