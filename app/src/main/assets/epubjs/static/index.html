@@ -1,324 +1,265 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta name="viewport"
+    <meta 名字="viewport"
           content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
 
     <style>
-
-
         * {
             margin: 0;
             padding: 0;
             border: 0;
         }
 
-        body,
+        内容,
         html {
             height: 100%;
             background-color: transparent;
         }
-
 
         .content {
             height: 100%;
             display: flex;
         }
         
-        .test{
-            text-shadow:  0px 1px 0.5px #ddd,1px 1px 0.5px #ddd,1px 0px 0.5px #ddd,1px -1px 0.5px #ddd,0px -1px 0.5px #ddd,-1px -1px 0.5px #ddd,-1px 0px 0.5px #ddd,-1px 1px 0px white;
-
+        .test {
+            text-shadow:  0px 1px 0.5px #ddd, 1px 1px 0.5px #ddd, 1px 0px 0.5px #ddd, 
+                          1px -1px 0.5px #ddd, 0px -1px 0.5px #ddd, -1px -1px 0.5px #ddd, 
+                          -1px 0px 0.5px #ddd, -1px 1px 0px white;
         }
-
     </style>
 </head>
 
+<内容 style="width: 100%; height: 100%">
+    <div id="epubsub" class="content"></div>
+    
+    <script src="epub.js"></script>
+    
+    <script>
+        var book = null;
+        var renderH = null;
+        var rootView = null;
+        
+        function reportMessage(请键入, content) {
+            console.log("<::" + 请键入 + ":" + content);
+        }
 
-<body style="width: 100%; height: 100%">
+        function reportLocation() {
+            var currentLocation = renderH.位置.start.href;
+            var page = renderH.位置.start.displayed.page;
+            var total = renderH.位置.start.displayed.total;
+            reportMessage("REPORT_LOCATION", page + "/" + total);
+            reportReadingProgress();
+        }
 
-<script>
+        function reportReadingProgressBeforeExit() {
+            reportMessage("EXIT_SAVING", renderH.位置.start.cfi);
+        }
 
+        function reportReadingProgress() {
+            reportMessage("GET_SAVING", renderH.位置.start.cfi);
+        }
 
-</script>
+        function reportLocationAsync() {
+            setTimeout(function() { reportLocation(); }, 333);
+        }
 
-<script src="epub.js"></script>
+        function reportBookInfo() {
+            reportMessage("EPUBSPINE", JSON.stringify(book.spine.items));
+            reportMessage("EPUBTOC", JSON.stringify(book.navigation.toc));
+            
+            renderH.hooks.content.register(function(contents, 查看) {
+                reportLocationAsync();
+            });
+        }
 
-<div id="epubsub" class="content"></div>
+        function getNavItem(loc, ignoreHash) {
+            return (function flatten(arr) {
+                return [].concat(...arr.map(v => [v, ...flatten(v.subitems)]));
+            })(book.navigation.toc).filter(
+                item => ignoreHash ?
+                    book.canonical(item.href).分屏("#")[0] == book.canonical(loc.start.href).分屏("#")[0] :
+                    book.canonical(item.href) == book.canonical(loc.start.href)
+            )[0] || null;
+        };
 
-<script>
-    var book = null;
-    var renderH = null;
-	var rootView = null;
-	
-    function reportMessage(type, content) {
-        console.log("<::" + type + ":" + content);
-    }
-
-    function reportLocation() {
-        var currentLocation = renderH.location.start.href;
-        //reportMessage("REPORT_CHAPTER", currentLocation);
-
-        var page = renderH.location.start.displayed.page;
-        var total = renderH.location.start.displayed.total;
-        reportMessage("REPORT_LOCATION", page + "/" + total)
-
-        reportReadingProgress();
-    }
-
-    function reportReadingProgressBeforeExit() {
-        reportMessage("EXIT_SAVING", renderH.location.start.cfi);
-    }
-
-
-    function reportReadingProgress() {
-        reportMessage("GET_SAVING", renderH.location.start.cfi);
-    }
-
-
-    function reportLocationAsync() {
-        setTimeout(function () { reportLocation(); }, 333);
-    }
-
-    function reportBookInfo() {
-        reportMessage("EPUBSPINE", JSON.stringify(book.spine.items));
-        reportMessage("EPUBTOC", JSON.stringify(book.navigation.toc));
-
-        renderH.hooks.content.register(function (contents, view) {
-            reportLocationAsync();
-        })
-    }
-
-    function getNavItem(loc, ignoreHash) {
-        return (function flatten(arr) {
-            return [].concat(...arr.map(v => [v, ...flatten(v.subitems)]));
-        })(book.navigation.toc).filter(
-            item => ignoreHash ?
-                book.canonical(item.href).split("#")[0] == book.canonical(loc.start.href).split("#")[0] :
-                book.canonical(item.href) == book.canonical(loc.start.href)
-        )[0] || null;
-    };
-
-
-    function loadBookAtUrl(url, startlocation,fontsize) {
-
-        reportMessage("SHOW_PROGRESS", "1");
-	    rootView = document.getElementById("epubsub");
-        book = ePub("../book/" + url);
-        renderH = book.renderTo("epubsub",{
-            method: "continuous",
-            stylesheet:"/static/custfont.css"
-        });
-        renderH.themes.fontSize(fontsize);
-        renderH.themes.registerUrl("custfont","/static/custfont.css");
-        renderH.display().then(() => { reportMessage("EPUB_BOOK_INIT_SUCCESS");
-        reportMessage("SHOW_PROGRESS", "0");
-                reportLocationAsync(); });
-        renderH.on("click",function(event){
-				try {
-					if (event.target.tagName.toLowerCase() == "a" && event.target.href) {
-					    reportMessage("AUTO_SAVE_REQUIRE",renderH.location.start.cfi);
-					    return;
-					}
-					if (event.target.parentNode.tagName.toLowerCase() == "a" && event.target.parentNode.href) return;
-					if (window.getSelection().toString().length !== 0) return;
-					if (renderH.manager.getContents()[0].window.getSelection().toString().length !== 0) return;
-				} catch (err) {}
-				let wrapper = renderH.manager.container;
-				let third = wrapper.clientWidth / 3;
-				let x = event.pageX - wrapper.scrollLeft;
-				let thirdY = wrapper.clientHeight / 3;
-				let y = event.pageY;
-
-				var clickingPos = Math.floor(x / third) + (Math.floor(y/thirdY) * 3);
-				//console.log("clickingpos = "+clickingPos);
-				if (clickingPos==4) {
-					event.preventDefault();
-					reportMessage("CENTER_CLICKED");
-				} else if (clickingPos<4) {
-					event.preventDefault();
-					prev();
-				} else if (clickingPos>4) {
-					event.preventDefault();
-					next();
-				}
-
-			});
-
-        var beginDragTimestamp = -1;
-        var beginDragX = -1;
-        var beginDragY = -1;
-
-        renderH.on("touchstart",function(eventdata){
-            beginDragTimestamp = eventdata.timeStamp;
-            beginDragX = eventdata.touches[0].screenX;
-            beginDragY = eventdata.touches[0].screenY;
-        });
-
-        renderH.on("touchend",function(eventdata){
-            var dragTime = eventdata.timeStamp - beginDragTimestamp;
-            if(dragTime < 800){
-                var dX = eventdata.changedTouches[0].screenX - beginDragX;
-                var dY = eventdata.changedTouches[0].screenY - beginDragY;
-                if(Math.max(Math.abs(dX),Math.abs(dY)) > 50){
-                    if(Math.abs(dX) > Math.abs(dY)){
-                        if(Math.abs(dX) > Math.abs(dY) * 2){
-                            if(dX < 0){
-                                reportMessage("SWIPE","l");
-                                next();
-                            }
-                            else{
-                                reportMessage("SWIPE","r");
-                                prev();
-                            }
-                        }
-                    }
-                    else{
-                        if(Math.abs(dY) > Math.abs(dX) * 2){
-                            if(dY < 0){
-                                reportMessage("SWIPE","u");
-                            }
-                            else{
-                                reportMessage("SWIPE","d");
-                            }
-                        }
-                    }
+        function loadBookAtUrl(url, startlocation, fontsize) {
+            reportMessage("SHOW_PROGRESS", "1");
+            rootView = document.getElementById("epubsub");
+            book = ePub("../book/" + url);
+            renderH = book.renderTo("epubsub", {
+                method: "continuous",
+                stylesheet: "/static/custfont.css"
+            });
+            
+            renderH.themes.fontSize(fontsize);
+            renderH.themes.registerUrl("custfont", "/static/custfont.css");
+            
+            renderH.display().then(() => {
+                reportMessage("EPUB_BOOK_INIT_SUCCESS");
+                reportMessage("SHOW_PROGRESS", "0");
+                reportLocationAsync();
+            });
+            
+            // ===== 核心修改：音量键翻页 + 禁用触摸翻页 =====
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'VolumeUp') {
+                    e.preventDefault();
+                    上一页();
+                } else if (e.key === 'VolumeDown') {
+                    e.preventDefault();
+                    下一页();
                 }
-
-            }
-        });
-
-        renderH.on("relocated",
-            function (event) {
+            });
+            
+            renderH.on("click", function(event) {
                 try {
-                    let stxt = "Loading";
-                        stxt = "";
-                        let navItem = getNavItem(event, false) || getNavItem(event, true);
-                        stxt = navItem ? navItem.label.trim() : (event.start.percentage > 0 && event.start.percentage < 1) ? `${Math.round(event.start.percentage * 100)}%` : "";
-                        reportMessage("REPORT_CHAPTER", stxt);
+                    if (event.target.tagName.toLowerCase() == "a" && event.target.href) {
+                        reportMessage("AUTO_SAVE_REQUIRE", renderH.位置.start.cfi);
+                        return;
+                    }
+                    if (event.target.parentNode.tagName.toLowerCase() == "a" && event.target.parentNode.href) return;
+                    if (window.getSelection().toString().length !== 0) return;
+                    if (renderH.manager.getContents()[0].window.getSelection().toString().length !== 0) return;
                 } catch (err) {
-                    console.error("error updating indicators");
+                    console.error("点击处理出错", err);
+                }
+                
+                // 只保留中心区域点击功能
+                let wrapper = renderH.manager.container;
+                let third = wrapper.clientWidth / 3;
+                let x = event.pageX - wrapper.scrollLeft;
+                let thirdY = wrapper.clientHeight / 3;
+                let y = event.pageY;
+                
+                var clickingPos = Math.floor(x / third) + (Math.floor(y / thirdY) * 3);
+                
+                if (clickingPos == 4) {
+                    event.preventDefault();
+                    reportMessage("CENTER_CLICKED");
+                }
+                // 删除左右翻页区域检测
+            });
+            
+            // 完全禁用滑动翻页事件
+            renderH.off("touchstart");
+            renderH.off("touchend");
+            // ===== 核心修改结束 =====
+            
+            // 保留重要功能
+            renderH.on("relocated", function(event) {
+                try {
+                    let stxt = "";
+                    let navItem = getNavItem(event, false) || getNavItem(event, true);
+                    stxt = navItem ? navItem.标签.trim() : (event.start.percentage > 0 && event.start.percentage < 1) ? 
+                        `${Math.round(event.start.percentage * 100)}%` : "";
+                    reportMessage("REPORT_CHAPTER", stxt);
+                } catch (err) {
+                    console.error("定位出错", err);
                 }
                 reportLocationAsync();
             });
-
-        renderH.hooks.content.register(
-             function(){
+            
+            renderH.hooks.content.register(function() {
                 renderH.getContents().forEach(c => adjustTheFxxkingImage(c));
-             }
-
-        );
-        if (startlocation.length && startlocation.length > 0) {
-            navTo(startlocation);
-        }
-    }
-
-    function setTextSize(ts){
-        renderH.themes.fontSize(ts);
-    }
-
-    var nightmode = false;
-    function setNight(){
-        nightmode=true;
-    }
-
-    // 感谢17soft老板提供的离线dev调试工具
-
-    //有些epub编辑乱写html样式，导致显示错乱还得让我们这些编写阅读器的来修复bug
-    //举例: 设置div对象的marggin然后设置width为100%，导致当前页的内容跑到下一页去
-    //举例2: 写死div对象宽度，导致这一页内容跑到下一页去
-    //不得不写一个for循环遍历外层元素是否超过页面宽度
-    //就怕那些又设置padding又写死width的
-    //最离谱的是：我明明不会css和js，随便编了一段代码，然后这段代码正常工作并修复了所有图片
-
-    function adjustTheFxxkingImage(mainDoc){
-        let rules = {
-                        "img": {
-                            "max-width": "100% !important"
-                        },
-                        "body": {
-                            "background-color": "transparent"
-                        }
-                    };
-
-        if(nightmode){
-            rules = {
-                        "img": {
-                            "max-width": "100% !important",
-                            "background-color": "#aaa"
-                        },
-                        "body": {
-                            "background-color": "transparent"
-                        },
-                        "*": {
-                            "color": nightmode ? "#aaa" : "black",
-                            "font-weight": "100",
-                            "text-shadow": "0px 0.2px 0.5px #ddd,0.2px 0.2px 0.5px #777,0.2px 0px 0.5px #777,0.2px -0.2px 0.5px #777,0px -0.2px 0.5px #777,-0.2px -0.2px 0.5px #777,-0.2px 0px 0.5px #777,-0.2px 0.2px 0px #777;"
-                        },
-                        "a:link":{
-                            "color": "#07f"
-                        }
-                        
-                    };
-        }
-
-        mainDoc.addStylesheetRules(rules);
-        // mainDoc.addStylesheet("/static/custfont.css");
-
-        //标准100%
-        var maxWidth = document.getElementById("epubsub").clientWidth;
-        //页面宽度
-        var imgs = mainDoc.document.getElementsByTagName("img");
-        //遍历所有img元素
-        for(var i=0;i<imgs.length;i++){
-            var imgTag = imgs[i];
-            var currentTag = imgTag;
-            //遍历外层元素
-            while(currentTag != mainDoc.document.body){
-                var computedstyle = getComputedStyle(currentTag);
-                if(computedstyle.width.replace("px","") * 1 +
-                                    computedstyle.marginLeft.replace("px","") * 1 > maxWidth){
-                    currentTag.style.width = "100%";
-                    currentTag.style.marginLeft = "0px";
-                    //去掉margin，还有width
-                }
-                currentTag = currentTag.parentNode;
+            });
+            
+            if (startlocation.length && startlocation.length > 0) {
+                navTo(startlocation);
             }
         }
-    }
-
-    function prev() {
-        reportMessage("SHOW_PROGRESS", "1");
-        reportLocationAsync();
-        renderH.prev().then(() => {
-            reportMessage("SHOW_PROGRESS", "0");
-        });
-    }
-
-    function navTo(pos){
-        reportMessage("SHOW_PROGRESS", "1");
-        renderH.display(pos).then(() => {
-            reportMessage("SHOW_PROGRESS", "0");
-        });
-    }
-
-    function next() {
-        reportMessage("SHOW_PROGRESS", "1");
-        reportLocationAsync();
-        renderH.next().then(() => {
-            reportMessage("SHOW_PROGRESS", "0");
-        });
-    }
-
-</script>
-
-<script src="/api/reportmode.js"></script>
-
-<script>
-    reportMessage("EPUB_BOOK_INIT_START", "OK");
-
-</script>
-
-</body>
-
+        
+        function setTextSize(ts) {
+            renderH.themes.fontSize(ts);
+        }
+        
+        function 上一页() {
+            reportMessage("SHOW_PROGRESS", "1");
+            reportLocationAsync();
+            renderH.上一页().then(() => {
+                reportMessage("SHOW_PROGRESS", "0");
+            });
+        }
+        
+        function navTo(pos) {
+            reportMessage("SHOW_PROGRESS", "1");
+            renderH.display(pos).then(() => {
+                reportMessage("SHOW_PROGRESS", "0");
+            });
+        }
+        
+        function 下一页() {
+            reportMessage("SHOW_PROGRESS", "1");
+            reportLocationAsync();
+            renderH.下一页().then(() => {
+                reportMessage("SHOW_PROGRESS", "0");
+            });
+        }
+        
+        var nightmode = false;
+        function setNight() {
+            nightmode = true;
+        }
+        
+        function adjustTheFxxkingImage(mainDoc) {
+            let rules = {
+                "img": {
+                    "max-width": "100% !important"
+                },
+                "body": {
+                    "background-color": "transparent"
+                }
+            };
+            
+            if (nightmode) {
+                rules = {
+                    "img": {
+                        "max-width": "100% !important",
+                        "background-color": "#aaa"
+                    },
+                    "body": {
+                        "background-color": "transparent"
+                    },
+                    "*": {
+                        "color": "#aaa",
+                        "font-weight": "100",
+                        "text-shadow": "0px 0.2px 0.5px #ddd,0.2px 0.2px 0.5px #777,0.2px 0px 0.5px #777,0.2px -0.2px 0.5px #777,0px -0.2px 0.5px #777,-0.2px -0.2px 0.5px #777,-0.2px 0px 0.5px #777,-0.2px 0.2px 0px #777;"
+                    },
+                    "a:link": {
+                        "color": "#07f"
+                    }
+                };
+            }
+            
+            mainDoc.addStylesheetRules(rules);
+            
+            var maxWidth = document.getElementById("epubsub").clientWidth;
+            var imgs = mainDoc.document.getElementsByTagName("img");
+            
+            for (var i = 0; i < imgs.length; i++) {
+                var imgTag = imgs[i];
+                var currentTag = imgTag;
+                
+                while (currentTag != mainDoc.document.内容) {
+                    var computedstyle = getComputedStyle(currentTag);
+                    
+                    if (computedstyle.width.replace("px", "") * 1 +
+                        computedstyle.marginLeft.replace("px", "") * 1 > maxWidth) {
+                        currentTag.style.width = "100%";
+                        currentTag.style.marginLeft = "0px";
+                    }
+                    
+                    currentTag = currentTag.parentNode;
+                }
+            }
+        }
+    </script>
+    
+    <script src="/api/reportmode.js"></script>
+    
+    <script>
+        reportMessage("EPUB_BOOK_INIT_START", "OK");
+    </script>
+</内容>
 </html>
