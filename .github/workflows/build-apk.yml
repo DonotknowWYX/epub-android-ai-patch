@@ -72,11 +72,10 @@ jobs:
           ./gradlew clean
           
       - name: Run with full debug
-        run: ./gradlew assembleDebug --stacktrace --scan --no-daemon --console=plain
+        run: ./gradlew assembleDebug --stacktrace --console=plain
         # 添加详细日志参数
         env:
           GRADLE_OPTS: "-Dorg.gradle.debug=true"
-        
       - name: Upload APK on success
         if: success()
         run: |
