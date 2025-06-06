@@ -1,4 +1,4 @@
-name: EPUBium Build with Volume Key Mod
+name: EPUBium Build with Volume Key Mod (Fixed Path)
 
 on:
   push:
@@ -10,7 +10,7 @@ jobs:
     name: Setup Android SDK
     runs-on: ubuntu-22.04
     outputs:
-      android-sdk-path: ${{ steps.setup.outputs.android-home }}
+      android-sdk-path: ${{ steps.export-sdk.outputs.android-home }}
     steps:
       - name: Checkout minimal code
         uses: actions/checkout@v4
@@ -23,33 +23,36 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
+      # 显式定义ANDROID_HOME路径
+      - name: Set Android Home
+        run: |
+          echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+          
       - name: Download Android Tools
         run: |
-          TOOLS_VERSION="9477386"  # 兼容JDK 17的稳定版本
+          TOOLS_VERSION="9477386"
           wget https://dl.google.com/android/repository/commandlinetools-linux-${TOOLS_VERSION}_latest.zip -O tools.zip
           unzip tools.zip -d cmdline-tools
           mv cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
           rm tools.zip
-        env:
-          ANDROID_HOME: /usr/local/lib/android/sdk
         
-      # ===== 关键修复：接受所有SDK许可证 =====
+      # 固定许可证密钥（所有必需项）
       - name: Accept all Android licenses
         run: |
-          # 创建许可证目录
           mkdir -p $ANDROID_HOME/licenses
-          # 接受所有许可证（自动生成所需的许可证文件）
-          echo "d56f5187479451a728f00fdead2e6e72" > $ANDROID_HOME/licenses/android-sdk-license
+          echo -e "8933bad161af4178b1185d1f37dbf86a\nd56f5187479451a728f00fdead2e6e72" > $ANDROID_HOME/licenses/android-sdk-license
           echo "84831b9409646a918e30573bab4c9c72" > $ANDROID_HOME/licenses/android-sdk-preview-license
-          echo "8933bad161af4178b1185d1f37dbf86a" >> $ANDROID_HOME/licenses/android-sdk-license
           
       - name: Install essential packages
         run: |
-          # 安装必需的Android SDK组件
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-33" "build-tools;29.0.3"
           
+      # 显式输出路径变量
       - name: Export SDK path
-        run: echo "android-home=$ANDROID_HOME" >> $GITHUB_OUTPUT
+        id: export-sdk
+        run: |
+          echo "ANDROID_SDK=$ANDROID_HOME" >> $GITHUB_OUTPUT
+          echo "android-home=$ANDROID_HOME" >> $GITHUB_OUTPUT
 
   build_apk:
     name: Build APK
@@ -65,6 +68,7 @@ jobs:
           java-version: '8'
           distribution: 'temurin'
           
+      # 使用正确的SDK路径变量
       - name: Configure SDK path
         run: |
           echo "sdk.dir=${{ needs.setup_android_sdk.outputs.android-sdk-path }}" > local.properties
@@ -86,11 +90,14 @@ jobs:
           name: epubium-volume-mod-apk
           path: apk-artifact/
           
-      # 调试信息
-      - name: Verify licenses
+      # 修复路径验证步骤
+      - name: Verify SDK setup
         if: ${{ always() }}
         run: |
-          echo "====== Installed licenses ======"
-          ls -l ${{ needs.setup_android_sdk.outputs.android-sdk-path }}/licenses
-          echo "====== SDK Components ======"
-          ${{ needs.setup_android_sdk.outputs.android-sdk-path }}/cmdline-tools/latest/bin/sdkmanager --list_installed
+          SDK_PATH="${{ needs.setup_android_sdk.outputs.android-sdk-path }}"
+          echo "====== SDK PATH ======"
+          echo $SDK_PATH
+          echo "====== Licenses ======"
+          ls -l $SDK_PATH/licenses/
+          echo "====== Installed Components ======"
+          $SDK_PATH/cmdline-tools/latest/bin/sdkmanager --list_installed
