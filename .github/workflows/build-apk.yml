@@ -1,110 +1,103 @@
-name: EPUBium Build (Full Fixed)
+name: Android Build & Release
 
 on:
   push:
     branches: [master]
-  workflow_dispatch:
+  workflow_dispatch:  # 允许手动触发
 
 jobs:
-  setup_android_sdk:
-    runs-on: ubuntu-22.04
-    outputs:
-      android-sdk-path: ${{ steps.setup_sdk.outputs.android-home }}
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        java: [11]  # 统一使用 JDK 11
+        gradle: [7.5.1]  # 与 AGP 7.4.2 兼容
+
     steps:
-      - name: Checkout code
+      - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          path: sdk-setup
-          
-      - name: Set up JDK 11
+          fetch-depth: 0  # 获取完整历史记录
+
+      - name: Setup JDK
         uses: actions/setup-java@v4
         with:
-          java-version: '11'
+          java-version: ${{ matrix.java }}
           distribution: 'temurin'
+
+      - name: Cache Dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.gradle/caches
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
 
       - name: Setup Android SDK
-        id: setup_sdk
         uses: android-actions/setup-android@v3
         with:
-          cmdline-tools-version: "9.0"  # 改用兼容性更好的旧版本
-          
-      # 接受所有Android许可证
-      - name: Accept licenses
-        run: |
-          yes | sudo ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --licenses
-          
-      - name: Install build-tools
-        run: |
-          ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager "build-tools;29.0.3" "platforms;android-29"
-          
-      - name: Export SDK path
-        run: echo "android-home=${ANDROID_HOME}" >> $GITHUB_OUTPUT
+          cmdline-tools-version: "9.0"
+          api-level: 34  # 最低支持 API 21
 
-  build_apk:
-    needs: setup_android_sdk
-    runs-on: ubuntu-22.04
-    # 禁用失败重试以获取完整日志
-    strategy:
-      fail-fast: false
-      
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        
-      - name: Set up JDK 8
-        uses: actions/setup-java@v4
-        with:
-          java-version: '8'
-          distribution: 'temurin'
-          
-      - name: Configure SDK
+      - name: Install Build Tools
         run: |
-          echo "sdk.dir=${{ needs.setup_android_sdk.outputs.android-sdk-path }}" > local.properties
-          echo "org.gradle.caching=false" >> gradle.properties  # 禁用缓存
-          echo "org.gradle.configureondemand=false" >> gradle.properties  # 禁用按需配置
-          
-      - name: Clean environment
+          yes | sdkmanager "build-tools;34.0.0" "platforms;android-34"
+
+      - name: Configure Project
         run: |
-          rm -rf ~/.gradle
-          rm -rf .gradle
-          rm -rf app/build
+          echo "sdk.dir=${ANDROID_HOME}" > local.properties
+          echo "org.gradle.daemon=false" >> gradle.properties  # 禁用守护进程
+          echo "org.gradle.parallel=false" >> gradle.properties  # 禁用并行构建
+          echo "android.injected.build.model.only.versioned=3" >> gradle.properties
+
+      - name: Clean Build
+        run: |
+          rm -rf ~/.gradle/caches/
+          rm -rf app/build/
           chmod +x gradlew
-          ./gradlew clean
-          
-      - name: Run with full debug
-        run: ./gradlew assembleDebug --stacktrace
-        # 添加详细日志参数
+          ./gradlew clean --refresh-dependencies
+
+      - name: Build Release APK
         env:
-          GRADLE_OPTS: "-Dorg.gradle.debug=true"
-      - name: Upload APK on success
-        if: success()
-        run: |
-          mkdir apk-artifact
-          cp app/build/outputs/apk/debug/*.apk apk-artifact/
-        
-      - name: Upload artifacts
+          GRADLE_OPTS: "-Xmx4g -Dfile.encoding=UTF-8"
+        run: ./gradlew assembleRelease --stacktrace --info
+
+      - name: Sign APK (Optional)
+        if: github.ref == 'refs/heads/master'  # 仅在主分支构建时签名
+        uses: r0adkll/sign-android-release@v1
+        with:
+          releaseDirectory: app/build/outputs/apk/release
+          signingKeyBase64: ${{ secrets.SIGNING_KEY }}
+          alias: ${{ secrets.ALIAS }}
+          keyStorePassword: ${{ secrets.KEYSTORE_PASSWORD }}
+          keyPassword: ${{ secrets.KEY_PASSWORD }}
+
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ job.status }}-apk-artifacts
+          name: Release-APK
           path: |
-            apk-artifact/
-            build/reports/
-            .gradle/
-            
-      # 确保总是收集日志
-      - name: Capture build logs
-        if: always()
-        run: |
-          mkdir diagnostic-logs
-          find . -name "*.log" -exec cp {} diagnostic-logs/ \;
-          cp build/reports/**/* diagnostic-logs/ || true
-          
-      - name: Upload diagnostic data
-        if: always()
-        uses: actions/upload-artifact@v4
+            app/build/outputs/apk/release/*.apk
+            build/reports/gradle-logs/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master'  # 仅在主分支发布
+
+    steps:
+      - name: Download Artifact
+        uses: actions/download-artifact@v4
         with:
-          name: diagnostic-data
-          path: |
-            diagnostic-logs/
-            gradle.properties
-            local.properties
+          name: Release-APK
+
+      - name: Publish to GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag: "v$(date +%s)"  # 自动生成时间戳版本号
+          name: "Release Build $(date +%Y-%m-%d)"
+          body: "Automated build from master branch"
+          draft: false
+          prerelease: false
+          artifacts: "*.apk"
