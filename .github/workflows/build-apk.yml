@@ -25,6 +25,15 @@ jobs:
           java-version: ${{ matrix.java }}
           distribution: 'temurin'
 
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: "12.0"  # 修正为有效版本
+          packages: |
+            cmdline-tools
+            build-tools;34.0.0
+            platforms;android-34
+
       - name: Cache Dependencies
         uses: actions/cache@v3
         with:
@@ -33,16 +42,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          cmdline-tools-version: "9.0"
-          api-level: 34  # 最低支持 API 21
-
-      - name: Install Build Tools
-        run: |
-          yes | sdkmanager "build-tools;34.0.0" "platforms;android-34"
-
       - name: Configure Project
         run: |
           echo "sdk.dir=${ANDROID_HOME}" > local.properties
@@ -50,12 +49,11 @@ jobs:
           echo "org.gradle.parallel=false" >> gradle.properties  # 禁用并行构建
           echo "android.injected.build.model.only.versioned=3" >> gradle.properties
 
-      - name: Clean Build
+      - name: Clean Environment
         run: |
           rm -rf ~/.gradle/caches/
           rm -rf app/build/
           chmod +x gradlew
-          ./gradlew clean --refresh-dependencies
 
       - name: Build Release APK
         env:
@@ -63,7 +61,7 @@ jobs:
         run: ./gradlew assembleRelease --stacktrace --info
 
       - name: Sign APK (Optional)
-        if: github.ref == 'refs/heads/master'  # 仅在主分支构建时签名
+        if: github.ref == 'refs/heads/master'
         uses: r0adkll/sign-android-release@v1
         with:
           releaseDirectory: app/build/outputs/apk/release
@@ -83,7 +81,7 @@ jobs:
   publish:
     needs: build
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/master'  # 仅在主分支发布
+    if: github.ref == 'refs/heads/master'
 
     steps:
       - name: Download Artifact
@@ -95,7 +93,7 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          tag: "v$(date +%s)"  # 自动生成时间戳版本号
+          tag: "v$(date +%s)"
           name: "Release Build $(date +%Y-%m-%d)"
           body: "Automated build from master branch"
           draft: false
