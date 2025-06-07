@@ -1,4 +1,4 @@
-name: Android CI/CD Pipeline
+name: Android Build Pipeline
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:  # 允许手动触发
 
 jobs:
-  build-and-release:
+  build:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -17,7 +17,7 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # 完整历史记录
+          fetch-depth: 0  # 获取完整历史记录
 
       - name: Setup JDK 17
         uses: actions/setup-java@v4
@@ -28,12 +28,19 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
-          cmdline-tools-version: "12.0"  # 最新稳定版
+          cmdline-tools-version: "12.0"  # 已验证可用版本
           packages: |
-            cmdline-tools
-            build-tools;34.0.0
+            cmdline-tools;12.0  # 正确格式
+            build-tools;34.0.0  # 验证可用版本
             platforms;android-34
             emulator  # 可选：需要模拟器时启用
+
+      - name: Configure SDK Mirror (China)
+        run: |
+          mkdir -p ~/.android
+          echo "sdk.dir=/usr/local/lib/android/sdk" > ~/.android/sdk.cfg
+          echo "sdkman.dir=/usr/local/lib/android/sdk" >> ~/.android/sdk.cfg
+          echo "sdkman.mirror.url=https://mirrors.neusoft.edu.cn" >> ~/.android/sdk.cfg
 
       - name: Cache Dependencies
         uses: actions/cache@v3
@@ -43,18 +50,21 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      - name: Configure Environment
+      - name: Clean Environment
+        run: |
+          rm -rf ~/.gradle/caches/
+          rm -rf app/build/
+          chmod +x gradlew
+
+      - name: Configure Project
         run: |
           echo "sdk.dir=${ANDROID_HOME}" > local.properties
           echo "org.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8" >> gradle.properties
           echo "android.useAndroidX=true" >> gradle.properties
           echo "android.enableJetifier=true" >> gradle.properties
 
-      - name: Clean Build Environment
-        run: |
-          rm -rf ~/.gradle/caches/
-          rm -rf app/build/
-          chmod +x gradlew
+      - name: Install Required Components
+        run: sdkmanager --install "cmdline-tools;12.0" "build-tools;34.0.0" "platforms;android-34"
 
       - name: Build Release APK
         env:
@@ -79,25 +89,3 @@ jobs:
             app/build/outputs/apk/release/*.apk
             build/reports/tests/test/*.html
             build/reports/gradle-logs/
-
-  publish-to-github:
-    needs: build-and-release
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-
-    steps:
-      - name: Download Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: Release-APK
-
-      - name: Publish to GitHub Release
-        uses: ncipollo/release-action@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          tag: "v$(date +%s)"
-          name: "Release Build $(date +%Y-%m-%d)"
-          body: "Automated build from main branch"
-          draft: false
-          prerelease: false
-          artifacts: "*.apk"
