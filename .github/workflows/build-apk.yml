@@ -26,14 +26,13 @@ jobs:
           distribution: 'temurin'
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+        uses: amyu/setup-android@v4  # 升级到新版Action
         with:
+          sdk-version: 34  # 指定Android 13平台
           cmdline-tools-version: "12.0"  # 已验证可用版本
-          packages: |
-            cmdline-tools;12.0  # 正确格式
-            build-tools;34.0.0  # 验证可用版本
-            platforms;android-34
-            emulator  # 可选：需要模拟器时启用
+          build-tools-version: "34.0.0"  # 验证可用版本
+          ndk-version: 25.2.9519653  # 推荐最新稳定版
+          cmake-version: 3.25.1  # 推荐最新稳定版
 
       - name: Configure SDK Mirror (China)
         run: |
